@@ -1,3 +1,5 @@
+This is a modified Castalia 3.3 for use in ECE 5101 Network simulations
+
 # ****************************************************************************
 # *  Copyright: National ICT Australia,  2007 - 2010                         *
 # *  Developed at the ATP lab, Networked Systems research theme              *
