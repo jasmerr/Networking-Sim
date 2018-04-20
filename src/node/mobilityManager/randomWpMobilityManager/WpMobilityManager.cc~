@@ -1,0 +1,164 @@
+/****************************************************************************
+ *  Copyright: National ICT Australia,  2007 - 2010                         *
+ *  Developed at the ATP lab, Networked Systems research theme              *
+ *  Author(s): Yuriy Tselishchev                                            *
+ *  This file is distributed under the terms in the attached LICENSE file.  *
+ *  If you do not find this file, copies can be found by writing to:        *
+ *                                                                          *
+ *      NICTA, Locked Bag 9013, Alexandria, NSW 1435, Australia             *
+ *      Attention:  License Inquiry.                                        *
+ *                                                                          *  
+ ****************************************************************************/
+
+#include "RandomWpMobilityManager.h"
+
+Define_Module(RandomWpMobilityManager);
+//Défiition du nouveau module
+void RandomWpMobilityManager::initialize()
+{
+	VMM = getParentModule() ;
+	node = VMM->getParentModule();
+
+	VirtualMobilityManager::initialize();
+	
+	updateInterval = par("updateInterval");
+	updateInterval = updateInterval / 1000;
+	//interval de temps en miliSeconde entre chaque affichage de daplacement (pas) 
+	
+	loc1_x = nodeLocation.x;
+	loc1_y = nodeLocation.y;
+	loc1_z = 0;
+	//position initilal du noeuds
+	snf_x = par("sNfield_x");
+	snf_y = par("sNfield_y");
+	snf_z = 0;
+	//les cooredonées de la cour de deplacement 
+	//, ces parametres vont etre utilisé pour déterminer la nouvel destination du noeud 
+	numNodeCol = par("numNodeCol");
+	numNodeLi = par("numNodeLi");
+
+	speed = par("speed");
+	//vitesse de dplacement 
+	
+	PauseTime = par("PauseTime");
+	RandomDest = par("RandomDest");
+
+	VarySpeed = par("VarySpeed");
+	speedMax = par("speedMax");
+	speedMin = par("speedMin");
+
+	VaryPauseTime = par("VaryPauseTime");
+	PauseMax = par("PauseMax");
+	PauseMin = par("PauseMin");
+//***********************************************************
+	TestTime = 1;
+	TimeOut = 0;
+
+	newDest = 0;
+	//cette variable est mise a 1 afin de generer une nouvel destination
+
+	if(VarySpeed){
+		speed = rand() % (int) speedMax + speedMin;
+	}
+	if (speed > 0) {
+
+		nextDest_x = uniform(0,snf_x);
+		nextDest_y = uniform(0,snf_y);
+
+		distance = sqrt(pow(loc1_x - nextDest_x, 2) + pow(loc1_y - nextDest_y, 2));
+
+		tmp = (distance / speed) / updateInterval;
+		dx = (nextDest_x - loc1_x)/tmp;//definir le pas de X
+		dy = (nextDest_y - loc1_y)/tmp;// definir le pas de y	
+	
+		setLocation(loc1_x, loc1_y, loc1_z);
+		scheduleAt(simTime() + updateInterval,
+			new MobilityManagerMessage("Periodic location update message", MOBILITY_PERIODIC));
+	}
+}
+
+void RandomWpMobilityManager::handleMessage(cMessage * msg)
+{
+	int msgKind = msg->getKind();
+	//recuperer la noture du message
+	switch (msgKind) {
+
+		case MOBILITY_PERIODIC:{
+			
+			if(newDest == 1){
+					if( TimeOut >= PauseTime ){
+								//definir une nouvelle destination
+//*****************************************************************************************************************************************
+					
+							nextDest_x = uniform(0,snf_x);
+							nextDest_y = uniform(0,snf_y);			
+								
+//******************************************************************************************************************************************
+								distance = sqrt(pow(loc1_x - nextDest_x, 2) + pow(loc1_y - nextDest_y, 2));
+
+								trace() << "new destination (x:y) " << nextDest_x << ":" << nextDest_y;
+								newDest = 0;
+
+								tmp = (distance / speed) / updateInterval;
+								dx = (nextDest_x - nodeLocation.x)/tmp;//definir le pas de X
+								dy = (nextDest_y - nodeLocation.y)/tmp;// definir le pas de y 						
+								TestTime = 1 ;
+								TimeOut = 0;
+
+								if(VarySpeed){
+									speed = rand() % (int) speedMax + speedMin;
+									trace() << "new speed defined :" << speed;
+								}
+								if(VaryPauseTime){
+									PauseTime = rand() % (int) PauseMax + PauseMin;
+									trace() << "new PauseTime defined :" << PauseTime;
+								}
+					}
+					else{
+						trace() << "in pause (x:y) " << nodeLocation.x << ":" << nodeLocation.y;
+						TimeOut += updateInterval;
+
+						//Mobinfos() << node->getIndex()<<" " << nodeLocation.x << 
+						//	" " << nodeLocation.y << " " << nodeLocation.z;
+					}					
+			}
+			if(newDest == 0 && TestTime == 1){
+				nodeLocation.x += dx;//incrementer X
+				nodeLocation.y += dy;// incrementer y
+				
+				trace() << "changed location(x:y) to " << nodeLocation.x << ":" << nodeLocation.y;
+				
+				Mobinfos() << node->getIndex()<<" " << nodeLocation.x << 
+					" " << nodeLocation.y << " " << nodeLocation.z;
+				
+				if(    (dx > 0 && nodeLocation.x > nextDest_x)
+				    || (dx < 0 && nodeLocation.x < nextDest_x)
+				    || (dy > 0 && nodeLocation.y > nextDest_y)
+				    || (dy < 0 && nodeLocation.y < nextDest_y)){
+					// si le noeud a attaint la nouvel destination alors cette derniere devient la nouvel pos init
+					//
+					nodeLocation.x -= dx;//incrementer X
+					nodeLocation.y -= dy;
+
+					newDest = 1;	
+				}
+				
+				
+			}
+			//trace() << "changed location(x:y) to " << nodeLocation.x << ":" << nodeLocation.y;	
+			notifyWirelessChannel();
+			scheduleAt(simTime() + updateInterval,
+				new MobilityManagerMessage("Periodic location update message", MOBILITY_PERIODIC));
+
+			break;
+		}
+
+		default:{
+			trace() << "WARNING: Unexpected message " << msgKind;
+		}
+	}
+
+	delete msg;
+	msg = NULL;
+}
+
